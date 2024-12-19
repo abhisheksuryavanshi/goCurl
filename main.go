@@ -1,8 +1,8 @@
 /*
 Example usage:
 
-	gocurl http://eu.httpbin.org/get
-	gocurl http://eu.httpbin.org/get:80
+	./gocurl http://eu.httpbin.org/get
+	./gocurl http://eu.httpbin.org/get:80
 */
 package main
 
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -25,70 +26,39 @@ func isProtocolSupported(protocolName string) bool {
 	return false
 }
 
-func getRequestParams(userURL string) []string {
-	userParams := []string{}
-	splitURL := strings.Split(userURL, "://")
-	// Protocol at index 0
-	userParams = append(userParams, splitURL[0])
-	var userHost string
-	for i := 0; i < len(splitURL[1]); i++ {
-		if splitURL[1][i] == '/' || splitURL[1][i] == ':' {
-			break
-		}
-		userHost += string(splitURL[1][i])
+// Finds url from the command line args and returns parsed url.
+// If url is not found returns nil
+func getUrl() *url.URL {
+	// url must be provided.
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: ./goCurl <URL>")
+		os.Exit(0)
 	}
-	// Host at index 1
-	userParams = append(userParams, userHost)
-	var port string
-	var httpMethod string
-	for i := len(userURL) - 1; i >= 0; i-- {
-		if len(port) == 0 && userURL[i] == ':' {
-			var customPort string
-			for j := i + 1; j < len(userURL) && userURL[j] != '/'; j++ {
-				customPort += string(userURL[j])
-			}
-			port = customPort
-		}
-		if len(httpMethod) == 0 && userURL[i] == '/' {
-			var customHttpMethod string
-			for j := i + 1; j < len(userURL); j++ {
-				customHttpMethod += string(userURL[j])
-			}
-			httpMethod = customHttpMethod
+	// url must be the last argument.
+	rawUrl := os.Args[len(os.Args)-1]
+	if !strings.Contains(rawUrl, "://") {
+		rawUrl = fmt.Sprintf("https://%s", rawUrl)
+	}
+	// try to parse the url.
+	parsedUrl, err := url.ParseRequestURI(rawUrl)
+	if err != nil {
+		println("Provided url is malformed: ", err)
+	}
+	// if port wasn't specified, append port according to the scheme.
+	if len(parsedUrl.Port()) == 0 {
+		switch parsedUrl.Scheme {
+		case "http":
+			parsedUrl.Host = parsedUrl.Host + ":80"
+		case "https":
+			parsedUrl.Host = parsedUrl.Host + ":443"
 		}
 	}
-	if len(port) == 0 {
-		port = "80"
-	}
-
-	if len(httpMethod) == 0 {
-		httpMethod = "get"
-	}
-	// Port at index 2
-	userParams = append(userParams, port)
-	// HTTP method at index 3
-	userParams = append(userParams, httpMethod)
-
-	return userParams
+	return parsedUrl
 }
 
-func verifyURL(userURL string) bool {
-	splitURL := strings.Split(userURL, "://")
-	if len(splitURL) < 2 {
-		fmt.Println("URL malformed.")
-		return false
-	}
-	protocolName := splitURL[0]
-	if !isProtocolSupported(protocolName) {
-		fmt.Println(protocolName, "not supported.")
-		return false
-	}
-	return true
-}
-
-func makeGetRequest(userUrl string) {
+func makeGetRequest(userUrl *url.URL) {
 	client := &http.Client{}
-	req, _ := http.NewRequest("GET", userUrl, nil)
+	req, _ := http.NewRequest("GET", userUrl.String(), nil)
 	req.Header.Set("Connection", "close")
 	response, err := client.Do(req)
 	if err != nil {
@@ -96,9 +66,16 @@ func makeGetRequest(userUrl string) {
 	}
 	defer response.Body.Close()
 	// Print all the headers we sent.
+	for key, values := range req.Header {
+		for _, value := range values {
+			fmt.Printf("> %s: %s\n", key, value)
+		}
+	}
+
+	// Print all the headers we recieved.
 	for key, values := range response.Header {
 		for _, value := range values {
-			fmt.Printf("%s: %s\n", key, value)
+			fmt.Printf("< %s: %s\n", key, value)
 		}
 	}
 	content, _ := io.ReadAll(response.Body)
@@ -108,14 +85,5 @@ func makeGetRequest(userUrl string) {
 
 func main() {
 	fmt.Println("Welcome to goCurl")
-	commandLineArgs := os.Args[1:]
-	fmt.Println(commandLineArgs)
-
-	userUrl := commandLineArgs[len(commandLineArgs)-1]
-	if !verifyURL(userUrl) {
-		panic("exiting")
-	}
-	cliargs := getRequestParams(userUrl)
-	fmt.Println(cliargs)
-	makeGetRequest(userUrl)
+	makeGetRequest(getUrl())
 }
