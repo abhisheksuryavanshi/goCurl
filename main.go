@@ -7,6 +7,7 @@ Example usage:
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,12 @@ func isProtocolSupported(protocolName string) bool {
 		}
 	}
 	return false
+}
+
+func intiFlags() bool {
+	v := flag.Bool("v", false, "verbose")
+	flag.Parse()
+	return *v
 }
 
 // Finds url from the command line args and returns parsed url.
@@ -65,17 +72,20 @@ func makeGetRequest(userUrl *url.URL) {
 		panic(err)
 	}
 	defer response.Body.Close()
-	// Print all the headers we sent.
-	for key, values := range req.Header {
-		for _, value := range values {
-			fmt.Printf("> %s: %s\n", key, value)
+	v := intiFlags()
+	if v {
+		// Print all the headers we sent.
+		for key, values := range req.Header {
+			for _, value := range values {
+				fmt.Printf("> %s: %s\n", key, value)
+			}
 		}
-	}
 
-	// Print all the headers we recieved.
-	for key, values := range response.Header {
-		for _, value := range values {
-			fmt.Printf("< %s: %s\n", key, value)
+		// Print all the headers we recieved.
+		for key, values := range response.Header {
+			for _, value := range values {
+				fmt.Printf("< %s: %s\n", key, value)
+			}
 		}
 	}
 	content, _ := io.ReadAll(response.Body)
